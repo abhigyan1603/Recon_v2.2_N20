@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Motor Control</title>
+<style>
+:root{--ground:#E4E6E1;--panel:#F3F4F0;--ink:#17262B;--muted:#5D6B6F;--line:#BFC4BD;--link:#0F6E6E;--arm:#E5B800;--stop:#B83A24;--ok:#2E7D4F;
+font-family:"Avenir Next","Segoe UI",system-ui,sans-serif}
+@media (prefers-color-scheme:dark){:root{--ground:#14201F;--panel:#1C2B2A;--ink:#E7ECE6;--muted:#93A4A0;--line:#304341;--link:#4FC3B5;--arm:#F0C419;--stop:#E2573F;--ok:#5CC48A}}
+*{box-sizing:border-box;touch-action:none;-webkit-user-select:none;user-select:none}
+html,body{margin:0;height:100%;background:var(--ground);color:var(--ink)}
+body{display:grid;grid-template-rows:auto 1fr;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+header{display:flex;gap:10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+header h1{font-size:17px;margin:0}.sp{flex:1}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--stop)}.dot.on{background:var(--ok)}
+#status{font-size:13px;color:var(--muted)}
+input[type=text],input[type=number]{padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);font:inherit;font-size:13px;touch-action:auto;user-select:text;width:100%}
+button{font:inherit;font-size:14px;font-weight:600;padding:10px 14px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer}
+button:active{transform:scale(.97)}button:disabled{opacity:.5}
+button:focus-visible,input:focus-visible{outline:3px solid var(--link);outline-offset:2px}
+button.danger{background:var(--stop);border-color:var(--stop);color:#fff}
+main{display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:14px;overflow:auto;align-content:start}
+@media (max-width:720px){main{grid-template-columns:1fr}}
+section{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:10px}
+h2{margin:0;font-size:14px;color:var(--muted)}
+.stickwrap{display:grid;place-items:center}
+.stick{position:relative;width:min(100%,250px);aspect-ratio:1;border-radius:50%;background:radial-gradient(circle,var(--ground) 0 62%,var(--line) 63% 64%,var(--ground) 65%);border:2px solid var(--line)}
+.stick::before,.stick::after{content:"";position:absolute;background:var(--line)}
+.stick::before{left:50%;top:8%;bottom:8%;width:1px}.stick::after{top:50%;left:8%;right:8%;height:1px}
+.knob{position:absolute;left:50%;top:50%;width:34%;height:34%;margin:-17% 0 0 -17%;border-radius:50%;background:var(--ink);border:4px solid var(--arm);z-index:2}
+.readout{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}.readout b{color:var(--ink)}
+.row{display:grid;gap:4px}.row label{display:flex;justify-content:space-between;font-size:13px;color:var(--muted)}.row label b{color:var(--ink)}
+input[type=range]{width:100%;accent-color:var(--link);height:28px;touch-action:auto}
+#clawBtn{font-size:20px;padding:22px 14px;background:var(--arm);border-color:var(--arm);color:#17262B}
+#clawBtn:disabled{background:var(--panel);color:var(--muted);border-color:var(--line)}
+.enc{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.cell{border:1px solid var(--line);border-radius:10px;padding:10px;background:var(--ground)}
+.cell small{display:block;color:var(--muted);font-size:12px}
+.cell .big{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums}
+.cell .sub{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+details summary{cursor:pointer;font-size:14px;color:var(--muted);touch-action:auto}
+.cfg{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;font-size:13px}
+.cfg label{display:grid;gap:3px;color:var(--muted)}
+.chk{display:flex!important;align-items:center;gap:6px;grid-template-columns:none}.chk input{width:auto;touch-action:auto}
+#log{font-size:12px;color:var(--muted);min-height:1.2em}
+</style>
+</head>
+<body>
+<header>
+  <span class="dot" id="dot"></span><h1>Motor Control</h1><span id="status">Disconnected</span><span class="sp"></span>
+  <input type="text" id="host" value="192.168.4.1" style="width:130px" aria-label="Robot address" inputmode="decimal">
+  <button id="connect">Connect</button>
+  <button class="danger" id="stop">STOP</button>
+</header>
+<main>
+  <section>
+    <h2>Drive (differential)</h2>
+    <div class="stickwrap"><div class="stick" id="stick"><div class="knob"></div></div></div>
+    <div class="readout"><span>Left <b id="lv">0</b></span><span>Right <b id="rv">0</b></span></div>
+    <div class="row"><label>Max speed <b id="maxv">255</b></label><input type="range" id="max" min="30" max="255" value="255"></div>
+  </section>
+
+  <section>
+    <h2>Claw motors</h2>
+    <button id="clawBtn">Turn +10°</button>
+    <div class="readout"><span id="clawState">Ready</span><span>Angle per press: <b id="degv">10</b>°</span></div>
+    <h2>Encoders</h2>
+    <div class="enc" id="enc"></div>
+    <button id="enc0">Reset encoders to 0</button>
+  </section>
+
+  <section>
+    <details open><summary>Claw settings</summary>
+      <div class="cfg">
+        <label>Angle per press (°)<input type="number" id="deg" value="10" min="1" max="180" step="1"></label>
+        <label>Counts per output rev<input type="number" id="cpr" value="1400" min="20" max="20000"></label>
+        <label>Min PWM<input type="number" id="pmin" value="70" min="0" max="255"></label>
+        <label>Max PWM<input type="number" id="pmax" value="200" min="0" max="255"></label>
+        <label class="chk"><input type="checkbox" id="inv2"> Reverse claw L</label>
+        <label class="chk"><input type="checkbox" id="inv3"> Reverse claw R</label>
+      </div>
+      <p style="font-size:12px;color:var(--muted);margin:8px 0 0">Counts per output rev: turn a claw shaft exactly one full turn by hand and read its tick count (4x decoding). Typical N20: 7 PPR × 4 × gear ratio, e.g. 1:50 → 1400, 1:100 → 2800.</p>
+    </details>
+    <div id="log"></div>
+  </section>
+  <!-- Add new feature panels here -->
+</main>
+
+<script>
+const $=id=>document.getElementById(id), clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const App={
+  ws:null,want:false,timer:null,retry:null,features:[],
+  register(f){this.features.push(f)},
+  send(o){if(this.ws&&this.ws.readyState===1)this.ws.send(JSON.stringify(o))},
+  store:{get(k,d){try{const v=localStorage.getItem('mc_'+k);return v===null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem('mc_'+k,JSON.stringify(v))}catch(e){}}},
+  connect(){
+    clearTimeout(this.retry);const host=$('host').value.trim()||'192.168.4.1';this.store.set('host',host);
+    status('Connecting…',false);
+    try{this.ws=new WebSocket(`ws://${host}/ws`)}catch(e){status('Invalid address',false);return}
+    this.ws.onopen=()=>{status('Connected to '+host,true);$('connect').textContent='Disconnect';
+      this.features.forEach(f=>f.onOpen&&f.onOpen());
+      clearInterval(this.timer);let last=performance.now();
+      this.timer=setInterval(()=>{const n=performance.now(),dt=(n-last)/1000;last=n;this.features.forEach(f=>f.tick&&f.tick(dt))},50)};
+    this.ws.onmessage=e=>{let m;try{m=JSON.parse(e.data)}catch(_){return}this.features.forEach(f=>f.onMessage&&f.onMessage(m))};
+    this.ws.onclose=()=>{clearInterval(this.timer);status(this.want?'Connection lost, retrying…':'Disconnected',false);
+      $('connect').textContent=this.want?'Disconnect':'Connect';if(this.want)this.retry=setTimeout(()=>this.connect(),1500)};
+    this.ws.onerror=()=>{$('log').textContent='Join Wi-Fi ESP32_Robot_AP first, then check the address.'};
+  }
+};
+function status(t,on){$('status').textContent=t;$('dot').classList.toggle('on',on)}
+$('host').value=App.store.get('host','192.168.4.1');
+$('connect').onclick=()=>{if(App.want){App.want=false;App.send({t:'drive',l:0,r:0});App.ws&&App.ws.close();clearTimeout(App.retry)}else{App.want=true;App.connect()}};
+
+/* ===== Feature: differential drive joystick (20 Hz stream, firmware has 300 ms failsafe) ===== */
+App.register({
+  l:0,r:0,
+  init(){
+    const el=$('stick'),knob=el.querySelector('.knob');let id=null;const self=this;
+    const set=(x,y)=>{knob.style.transform=`translate(${x*145}%,${-y*145}%)`;const m=+$('max').value;
+      self.l=Math.round(clamp(y+x,-1,1)*m);self.r=Math.round(clamp(y-x,-1,1)*m);$('lv').textContent=self.l;$('rv').textContent=self.r};
+    const calc=e=>{const r=el.getBoundingClientRect(),R=r.width/2*.62;let x=(e.clientX-(r.left+r.width/2))/R,y=-(e.clientY-(r.top+r.height/2))/R;
+      const m=Math.hypot(x,y);if(m>1){x/=m;y/=m}if(m<.08){x=0;y=0}set(x,y)};
+    el.addEventListener('pointerdown',e=>{id=e.pointerId;el.setPointerCapture(id);calc(e)});
+    el.addEventListener('pointermove',e=>{if(e.pointerId===id)calc(e)});
+    const end=e=>{if(e.pointerId===id){id=null;set(0,0)}};el.addEventListener('pointerup',end);el.addEventListener('pointercancel',end);
+    this.set=set;
+    $('max').oninput=e=>$('maxv').textContent=e.target.value;
+    $('stop').onclick=()=>{set(0,0);App.send({t:'drive',l:0,r:0})};
+    addEventListener('blur',()=>$('stop').click());
+    document.addEventListener('visibilitychange',()=>{if(document.hidden)$('stop').click()});
+  },
+  tick(){App.send({t:'drive',l:this.l,r:this.r})}
+});
+
+/* ===== Feature: claw button, settings, encoder display ===== */
+App.register({
+  cfgIds:['deg','cpr','pmin','pmax'],
+  cpr:1400,
+  init(){
+    $('enc').innerHTML=['Drive L (M0)','Drive R (M1)','Claw L (M2)','Claw R (M3)'].map((n,i)=>
+      `<div class="cell"><small>${n}</small><div class="big" id="e${i}">0</div><div class="sub" id="es${i}">-</div></div>`).join('');
+    const cfg=App.store.get('cfg',{deg:10,cpr:1400,pmin:70,pmax:200,inv2:false,inv3:false});
+    this.cfgIds.forEach(k=>$(k).value=cfg[k]);$('inv2').checked=cfg.inv2;$('inv3').checked=cfg.inv3;
+    const save=()=>{const c={};this.cfgIds.forEach(k=>c[k]=+$(k).value);c.inv2=$('inv2').checked;c.inv3=$('inv3').checked;
+      App.store.set('cfg',c);this.cpr=c.cpr;App.send({t:'cfg',...c});$('degv').textContent=c.deg;this.label()};
+    this.cfgIds.concat(['inv2','inv3']).forEach(k=>$(k).onchange=save);this.save=save;this.cpr=cfg.cpr;$('degv').textContent=cfg.deg;
+    $('clawBtn').onclick=()=>App.send({t:'claw'});
+    $('enc0').onclick=()=>App.send({t:'enc0'});
+    this.next=1;this.label();
+  },
+  onOpen(){this.save()},   /* push saved settings to the ESP32 on every connect */
+  label(){const d=$('deg').value;$('clawBtn').textContent=this.next>0?`Turn +${d}° ▶`:`◀ Turn −${d}°`},
+  onMessage(m){
+    if(m.t!=='tel')return;
+    m.enc.forEach((v,i)=>{$('e'+i).textContent=v;
+      $('es'+i).textContent=(i>=2?`${(v/this.cpr*360).toFixed(1)}° · `:'')+`${m.spd[i]} cnt/s`});
+    this.next=m.claw.next;this.label();
+    $('clawBtn').disabled=m.claw.busy;$('clawState').textContent=m.claw.busy?'Moving…':'Ready';
+  }
+});
+App.features.forEach(f=>f.init&&f.init());
+</script>
+</body>
+</html>

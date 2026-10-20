@@ -1,0 +1,7 @@
+{
+  "appId": "com.teammars.motorcontrol",
+  "appName": "Motor Control",
+  "webDir": "www",
+  "server": { "androidScheme": "http", "cleartext": true },
+  "android": { "allowMixedContent": true }
+}
